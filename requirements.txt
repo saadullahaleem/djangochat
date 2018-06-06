@@ -1,0 +1,6 @@
+django
+psycopg2
+social-auth-app-django
+python-social-auth
+channels
+channels_redis

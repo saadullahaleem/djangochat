@@ -1,0 +1,34 @@
+{% if form.errors %}
+<div class="row">
+
+    <ul class="list-unstyled">
+        {% for field in form %}
+        {% for error in field.errors %}
+        <li><strong>{{ field.name }} : {{ error|escape }}</strong></li>
+        {% endfor %}
+        {% endfor %}
+        {% for error2 in form.non_field_errors %}
+        <li><strong>{{ error2|escape }}</strong></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% if next %} {% if user.is_authenticated %}
+<div class="row">
+    <p>Your account doesn't have access to this page. To proceed, please login with an account that has access.</p>
+    {% else %}
+    <p>Please login to see this page.</p>
+</div>
+{% endif %} {% endif %}
+
+
+{% if messages %}
+<div class="row">
+    <ul class="list-unstyled">
+        {% for message in messages %}
+        <li
+        {% if message.tags %} class="{{ message.tags }}" {% endif %}>{{ message }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
