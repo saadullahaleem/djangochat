@@ -35,7 +35,8 @@
             <form class="row" id="chat-interface">
                 <div class="card darken-1" id="stats">
                     <div class="card-content black-text">
-                        <b>Messages in last minute: </b><b id="messages-per-minute"></b>
+                        <div class="left"><b>Messages in last minute: </b><b id="messages-count"></b></div>
+                        <div class="right"><b>Leader: </b><b id="leader"></b></div>
                         <p id="hypeValue"></p>
                     </div>
                 </div>
@@ -72,32 +73,44 @@
 
     $("#close-modal").on("click", function () {
         console.log("modal closed");
-       $("#all-user-messages").empty();
+        $("#all-user-messages").empty();
     });
 
 
     chatSocket.onmessage = function (e) {
 
         let data = JSON.parse(e.data);
-        let message = data['message'];
-        let sender = data['sender'];
-        let time = moment().format('h:mm:ss a');
-        console.log("message received", sender);
-        let list = document.querySelector('#chat-log');
-        list.innerHTML += `<li class="chat-item"><div class="left"><a class="modal-trigger" href="#modal1" class="sender_name"><b>${sender}</b></a> ${message}</div><div class="right grey-text time">${time}</div></li></br>`;
-        $(".chat-item").on('click', function (e) {
-            let sender_name = $(this).find('a').text();
-            let url = messages_by_user + sender_name;
-            $('.modal-content h4').text("Messages by " + sender_name);
-            console.log($(this).find('a').text());
-            $.get(url, function (data) {
-                let messages = data['results'];
-                messages.forEach(function (message) {
-                    $("#all-user-messages").append('<li><div class="left" style="width: 80%;"><b>' + message['message'] + '</b></div><div class="right grey-text" style="width: 20%;">' + moment(message['created']).format("h:mm:ss a") + '</div></li>');
-                })
+        console.log(data);
+        let type = data['type'];
+
+
+        if (type == 'stats') {
+            let messages_count = data['messages_count'];
+            let leader = data['leader'];
+            $("#messages-count").text(messages_count);
+            $("#leader").text(leader);
+        }
+
+        if (type == 'chat_message') {
+            let message = data['message'];
+            let sender = data['sender'];
+            let time = moment().format('h:mm:ss a');
+            let list = document.querySelector('#chat-log');
+            list.innerHTML += `<li class="chat-item"><div class="left"><a class="modal-trigger" href="#modal1" class="sender_name"><b>${sender}</b></a> ${message}</div><div class="right grey-text time">${time}</div></li></br>`;
+            $(".chat-item").on('click', function (e) {
+                let sender_name = $(this).find('a').text();
+                let url = messages_by_user + sender_name;
+                $('.modal-content h4').text("Messages by " + sender_name);
+                console.log($(this).find('a').text());
+                $.get(url, function (data) {
+                    let messages = data['results'];
+                    messages.forEach(function (message) {
+                        $("#all-user-messages").append('<li><div class="left" style="width: 80%;"><b>' + message['message'] + '</b></div><div class="right grey-text" style="width: 20%;">' + moment(message['created']).format("h:mm:ss a") + '</div></li>');
+                    })
+                });
             });
-        });
-        scrollToBottom();
+            scrollToBottom();
+        }
     };
 
     chatSocket.onclose = function (e) {
@@ -111,7 +124,8 @@
         console.log("message submitted");
         chatSocket.send(JSON.stringify({
             'message': message,
-            'sender': '{{ user.alias }}'
+            'sender': '{{ user.alias }}',
+            'type': 'chat_message'
         }));
 
         messageInputDom.value = '';
@@ -128,18 +142,8 @@
         }
     }
 
-    setInterval(function() {
-        let mpm = 0;
-      $($('#chat-log li').get().reverse()).each(function(val) {
-          console.log((moment() - moment($(this).find(".time").text(), "h:mm:ss a")) / 1000);
-          if (((moment() - moment($(this).find(".time").text(), "h:mm:ss a")) / 1000) <= 60) {
-              mpm += 1;
-              console.log("ss")
-          } else {
-              return false;
-          }
-        });
-        $("#messages-per-minute").text(mpm);
+    setInterval(function () {
+        chatSocket.send(JSON.stringify({"type": "stats"}));
     }, 2000);
 
 </script>
