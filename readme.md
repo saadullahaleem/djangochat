@@ -1,6 +1,6 @@
 # Django Channels Chat
 
-A simple chat application made using Django channels. It has basic social authentication and a chat interface.
+A simple chat application made using Django channels. It provides APIs to autheticate a user using google-oauth2 and to edit a user's profile and fetch messages by a user.
 
 ## Requirements
 
