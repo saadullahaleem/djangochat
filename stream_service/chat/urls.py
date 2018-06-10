@@ -1,10 +1,13 @@
-from django.conf.urls import url
-from .views import home, update_profile, logout, get_all_messages
+from django.conf.urls import url, include
+from .views import exchange_token, ProfileView, MessageViewSet, LogoutView
+from rest_framework.routers import DefaultRouter
 
+router = DefaultRouter()
+router.register(r'messages', MessageViewSet, base_name='messages')
 
 urlpatterns = [
-    url(r'^$', home),
-    url(r'^profile/$', update_profile),
-    url(r'^auth/logout/$', logout),
-    url(r'^messages/(?P<user_alias>[^/]+)/$', get_all_messages)
+    url(r'^oauth/(?P<backend>[^/]+)/$', exchange_token),
+    url(r'^', include(router.urls)),
+    url(r'^auth/logout/$', LogoutView.as_view()),
+    url(r'^profile/$', ProfileView.as_view())
 ]

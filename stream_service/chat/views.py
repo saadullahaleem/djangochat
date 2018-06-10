@@ -1,67 +1,89 @@
-from django.core import serializers
-from django.shortcuts import render
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout as auth_logout
-from django.http import HttpResponseRedirect, JsonResponse
-from django.db import transaction
-from .forms import UserForm
-from .models import Message
+from .models import Message, User
+from .serializers import SocialSerializer, UserSerializer, MessageSerializer
+from requests.exceptions import HTTPError
+from social_django.utils import psa
+from rest_framework.response import Response
+from rest_framework.authtoken.models import Token
+from rest_framework import status, views
+from rest_framework.decorators import api_view
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import RetrieveUpdateAPIView
+from rest_framework.viewsets import ModelViewSet
 
 
-@login_required
-def home(request):
-    chat_queryset = Message.objects.order_by("-created")[:10]
-    chat_message_count = len(chat_queryset)
+class LogoutView(views.APIView):
 
-    if chat_message_count > 0:
-        first_message_id = chat_queryset[len(chat_queryset) - 1].id
-    else:
-        first_message_id = -1
+    permission_classes = (IsAuthenticated, )
 
-    previous_id = -1
-
-    if first_message_id != -1:
+    def post(self, request):
         try:
-            previous_id = Message.objects.filter(pk__lt=first_message_id).order_by("-pk")[:1][0].id
-        except IndexError:
-            previous_id = -1
+            request.user.auth_token.delete()
+        except Exception as e:
+            pass
 
-    chat_messages = reversed(chat_queryset)
+        auth_logout(request)
 
-    return render(request, "home.html", {
-        'chat_messages': chat_messages,
-        'first_message_id': previous_id,
-    })
+        return Response({"success": "Successfully logged out."},
+                        status=status.HTTP_200_OK)
 
 
-@login_required
-@transaction.atomic
-def update_profile(request):
-    if request.method == 'POST':
-        user_form = UserForm(request.POST, instance=request.user)
-        if user_form.is_valid():
-            user_form.save()
-            return HttpResponseRedirect('/')
+class ProfileView(RetrieveUpdateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        return self.request.user
+
+    class Meta:
+        model = User
+        fields = ('id', 'alias')
+
+
+class MessageViewSet(ModelViewSet):
+
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        user_id = self.request.query_params.get('user_id', None)
+        qs = Message.objects.all().order_by('-created')
+        if user_id:
+            return qs.filter(user_id=user_id)
         else:
-            messages.error(request, 'Please correct the error below.')
-    else:
-        user_form = UserForm(instance=request.user)
+            return qs
 
-    return render(request, 'profile.html', {
-        'user_form': user_form
-    })
+    serializer_class = MessageSerializer
 
 
-def logout(request):
-    auth_logout(request)
-    return HttpResponseRedirect('/')
+@api_view(http_method_names=['POST'])
+@psa()
+def exchange_token(request, backend):
+    serializer = SocialSerializer(data=request.data)
+    if serializer.is_valid(raise_exception=True):
 
+        try:
+            user = request.backend.do_auth(serializer.validated_data['access_token'])
+        except HTTPError as e:
+            return Response(
+                {'errors': {
+                    'auth_token': 'Invalid token',
+                    'detail': str(e),
+                }},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-@login_required
-def get_all_messages(request, user_alias):
-
-    messages = Message.objects.filter(user__alias=user_alias).order_by('-created').values('message', 'created')[:20]
-
-    return JsonResponse({'results': list(messages)})
-
+        if user:
+            Token.objects.filter(user=user).delete()
+            token = Token.objects.create(user=user)
+            return Response({
+                'auth_token': token.key,
+                'user': {
+                    'alias': user.alias,
+                    'id': user.id
+                }
+            })
+        else:
+            return Response(
+                {"error": "Authentication Failed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

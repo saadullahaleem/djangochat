@@ -8,6 +8,7 @@ from django.db.models import Count
 
 class ChatConsumer(WebsocketConsumer):
     def connect(self):
+
         self.room_name = 'stream'
         self.room_group_name = 'chat_stream'
         self.user = self.scope['user']
@@ -20,6 +21,16 @@ class ChatConsumer(WebsocketConsumer):
 
         self.accept()
 
+        async_to_sync(self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type': 'user_connected',
+                'user': self.scope['user'].alias,
+                'user_id': self.scope['user'].id,
+                "created": datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%SZ')
+            }
+        )
+
     def disconnect(self, close_code):
         async_to_sync(self.channel_layer.group_discard)(
             self.room_group_name,
@@ -27,14 +38,17 @@ class ChatConsumer(WebsocketConsumer):
         )
 
     def receive(self, text_data):
-        print(text_data)
 
         text_data_json = json.loads(text_data)
         type = text_data_json['type']
 
+        if type == "stats":
+            self.stats()
+
         if type == "chat_message":
             message = text_data_json['message']
             sender = text_data_json['sender']
+            sender_id = text_data_json['sender_id']
 
             # Send message to room group
             async_to_sync(self.channel_layer.group_send)(
@@ -42,42 +56,38 @@ class ChatConsumer(WebsocketConsumer):
                 {
                     'type': 'chat_message',
                     'message': message,
-                    'sender': sender
+                    'sender': sender,
+                    'sender_id': sender_id
                 }
             )
 
-            print("received message from {}".format(sender))
-
             try:
-                Message.objects.create(user=User.objects.get(alias=sender), message=message)
+                Message.objects.create(user=User.objects.get(id=sender_id), message=message)
             except Exception as e:
                 print(str(e))
 
-        if type == "stats":
-            async_to_sync(self.channel_layer.group_send)(
-                self.room_group_name,
-                {
-                    'leader': 'test leader',
-                    'messages_count': 2,
-                    'type': 'stats'
-                }
-            )
+    def user_connected(self, event):
+        self.send(text_data=json.dumps({
+            'type': 'user_connected',
+            'user': event['user'],
+            'user_id': event['user_id'],
+            "created": event['created']
+        }))
 
     def chat_message(self, event):
         message = event['message']
         sender = event['sender']
+        sender_id = event['sender_id']
 
-        # print(event)
-
-        # Send message to WebSocket
         self.send(text_data=json.dumps({
             'type': 'chat_message',
             'message': message,
-            'sender': sender
+            'sender': sender,
+            'sender_id': sender_id,
+            "created": datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%SZ')
         }))
 
-    def stats(self, event):
-        print("stats method called")
+    def stats(self):
         timedelta = datetime.datetime.now() - datetime.timedelta(minutes=1)
         messages = Message.objects.filter(created__gte=timedelta)
         messages_count = messages.count()
@@ -86,7 +96,7 @@ class ChatConsumer(WebsocketConsumer):
         if len(leaders):
             leader = User.objects.get(id=leaders[0]['user']).alias
         else:
-            leader = "-"
+            leader = " "
 
         self.send(text_data=json.dumps({
             'leader': leader,
