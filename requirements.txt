@@ -37,7 +37,7 @@ social-auth-app-django==2.1.0
 social-auth-core==1.7.0
 Twisted==18.4.0
 txaio==2.10.0
-urllib3==1.22
+urllib3==1.26.5
 virtualenv==16.0.0
 virtualenv-clone==0.3.0
 whitenoise==3.3.1
